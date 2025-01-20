@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .utils import InitWeights_He
 from .dysample import DySample
-
+import torch.nn.functional as F
 
 class conv(nn.Module):
     def __init__(self, in_c, out_c, dp=0):
@@ -44,42 +44,30 @@ class feature_fuse(nn.Module):
 
 
 class up(nn.Module):
-    def __init__(self, in_c, out_c, dp=0, upsample="Deconv"):
+    def __init__(self, in_c, out_c, dp=0, upsample="BiLinear"):
         super(up, self).__init__()
         if upsample == "Deconv":
+            self.interpolate = False
             self.up = nn.Sequential(
                 nn.ConvTranspose2d(in_c, out_c, kernel_size=2,
                                 padding=0, stride=2, bias=False),
                 nn.BatchNorm2d(out_c),
                 nn.LeakyReLU(0.1, inplace=False))
-        elif upsample == "dysample": #LP-style with the static scope factor
+        elif upsample == "BiLinear":
+            self.interpolate = True
             self.up = nn.Sequential(
-                nn.Conv2d(in_c, out_c, kernel_size=1, padding=0, bias=False),
-                DySample(out_c, dyscope=False, style='lp'),
+                nn.Conv2d(in_c, out_c, kernel_size=1),
                 nn.BatchNorm2d(out_c),
-                nn.LeakyReLU(0.1, inplace=False))
-        elif upsample == "dysample+": #LP-style with the dynamic scope factor
-            self.up = nn.Sequential(
-                nn.Conv2d(in_c, out_c, kernel_size=1, padding=0, bias=False),
-                DySample(out_c, dyscope=True, style='lp'),
-                nn.BatchNorm2d(out_c),
-                nn.LeakyReLU(0.1, inplace=False))
-        elif upsample == "dySample-S": #PL-style with the static scope factor
-            self.up = nn.Sequential(
-                nn.Conv2d(in_c, out_c, kernel_size=1, padding=0, bias=False),
-                DySample(out_c, dyscope=False, style='pl'),
-                nn.BatchNorm2d(out_c),
-                nn.LeakyReLU(0.1, inplace=False))
-        elif upsample == "dySample-S+": #PL-style with dynamic scope factor
-            self.up = nn.Sequential(
-                nn.Conv2d(in_c, out_c, kernel_size=1, padding=0, bias=False),
-                DySample(out_c, dyscope=True, style='pl'),
-                nn.BatchNorm2d(out_c),
-                nn.LeakyReLU(0.1, inplace=False))
+                nn.LeakyReLU(0.1, inplace=False)
+            )
             
 
     def forward(self, x):
-        x = self.up(x)
+        if self.interpolate:
+            x = self.up(x)
+            x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
+        else:
+            x = self.up(x)
         return x
 
 
@@ -98,7 +86,7 @@ class down(nn.Module):
 
 
 class block(nn.Module):
-    def __init__(self, in_c, out_c,  dp=0, is_up=False, is_down=False, fuse=False, upsample="Deconv"):
+    def __init__(self, in_c, out_c,  dp=0, is_up=False, is_down=False, fuse=False, upsample="BiLinear"):
         super(block, self).__init__()
         self.in_c = in_c
         self.out_c = out_c
@@ -134,7 +122,7 @@ class block(nn.Module):
 
 
 class FR_UNet(nn.Module):
-    def __init__(self,  num_classes=1, num_channels=1, feature_scale=2,  dropout=0.2, fuse=True, out_ave=True, upsample="Deconv"):
+    def __init__(self,  num_classes=1, num_channels=1, feature_scale=2,  dropout=0.2, fuse=True, out_ave=True, upsample="BiLinear"):
         super(FR_UNet, self).__init__()
         self.out_ave = out_ave
         filters = [64, 128, 256, 512, 1024]

@@ -19,8 +19,6 @@ from bunch import Bunch
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--export_path", type=str)
-    parser.add_argument("--task", type=str, default="cls", choices=["cls", "seg"])
-    parser.add_argument("--model", type=str, default="efficientvit-l2")
     parser.add_argument("--resolution", type=int, nargs="+", default=224)
     parser.add_argument("--op_set", type=int, default=16)
     parser.add_argument("--bs", type=int, default=2)

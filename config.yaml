@@ -1,7 +1,7 @@
 model:
   type: FR_UNet
   args:
-    {upsample: dySample-S+}
+    {upsample: BiLinear}
 
 loss:
   type: BCELoss
