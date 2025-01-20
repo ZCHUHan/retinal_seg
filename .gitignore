@@ -1,0 +1,8 @@
+/data
+/__pycache__
+/outputs
+/results
+/saved
+
+# 忽略操作系统生成的文件
+.DS_Store
