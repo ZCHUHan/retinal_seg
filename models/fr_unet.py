@@ -65,7 +65,7 @@ class up(nn.Module):
     def forward(self, x):
         if self.interpolate:
             x = self.up(x)
-            x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
+            x = F.interpolate(x, scale_factor=2, mode='bicubic')
         else:
             x = self.up(x)
         return x
