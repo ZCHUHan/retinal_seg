@@ -43,11 +43,11 @@ if __name__ == '__main__':
                         required=False, default=False, action="store_true")
     parser.add_argument('-ps', '--patch_size', default=48, type=int,
                         help='patch_size for sliding window')
-    parser.add_argument('--stride', default=24, type=int,
+    parser.add_argument('--stride', default=44, type=int,
                         help='stride_size for sliding window')
     args = parser.parse_args()
     yaml = YAML(typ='safe', pure=True)
-    with open('config.yaml', 'r') as file:
+    with open('config_quan.yaml', 'r') as file:
         CFG = Bunch(yaml.load(file))
     if args.sliding:
         main(args.dataset_path, args.wetght_path, CFG, args.show, args.save_path, patch_size=args.patch_size, stride=args.stride)

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .utils import InitWeights_He
 import torch.nn.functional as F
-from ..quantizer.quant_lsq import QuanConv, QuanLinear, QuanBatchNorm, QuanLeakyRELU
+from quantizer.quant_lsq import QuanConv, QuanLinear, QuanBatchNorm, QuanLeakyRELU
 
 class conv(nn.Module):
     def __init__(self, in_c, out_c, dp=0):
@@ -118,9 +118,9 @@ class block(nn.Module):
             return x, x_up, x_down
 
 
-class FR_UNet(nn.Module):
+class FR_UNet_Quan(nn.Module):
     def __init__(self,  num_classes=1, num_channels=1, feature_scale=2,  dropout=0.2, fuse=True, out_ave=True, upsample="BiLinear"):
-        super(FR_UNet, self).__init__()
+        super(FR_UNet_Quan, self).__init__()
         self.out_ave = out_ave
         filters = [64, 128, 256, 512, 1024]
         filters = [int(x / feature_scale) for x in filters]

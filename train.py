@@ -59,6 +59,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     yaml = YAML(typ='safe', pure=True)
-    with open('config.yaml', 'r') as file:
+    with open('config_quan.yaml', 'r') as file:
         CFG = Bunch(yaml.load(file))
     main(CFG, args.dataset_name, args.dataset_path, args.batch_size, args.val)
