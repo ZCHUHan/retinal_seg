@@ -3,6 +3,9 @@
 /outputs
 /results
 /saved
+/npz_logging
+/quan_onnx
+
 
 # 忽略操作系统生成的文件
 .DS_Store

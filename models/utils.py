@@ -1,6 +1,9 @@
-
+import torch
 from torch import nn
+import torch.nn.functional as F
+
 from timm.models.layers import trunc_normal_
+from typing import Any, List, Optional, Tuple, Union, Dict, Callable
 
 class InitWeights_He(object):
     def __init__(self, neg_slope=1e-2):
@@ -18,3 +21,38 @@ class InitWeights_He(object):
         elif isinstance(module, nn.LayerNorm):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
+            
+def resize(
+    x: torch.Tensor,
+    size: Optional[Any] = None,
+    scale_factor: Optional[List[float]] = None,
+    mode: str = "bicubic",
+    align_corners: Optional[bool] = False,
+) -> torch.Tensor:
+    if mode in {"bilinear", "bicubic"}:
+        return F.interpolate(
+            x,
+            size=size,
+            scale_factor=scale_factor,
+            mode=mode,
+            align_corners=align_corners,
+        )
+    elif mode in {"nearest", "area"}:
+        return F.interpolate(x, size=size, scale_factor=scale_factor, mode=mode)
+    else:
+        raise NotImplementedError(f"resize(mode={mode}) not implemented.")
+    
+global_idx = 0
+
+def get_next_global_idx():
+    global global_idx
+    global_idx = global_idx + 1
+    return global_idx
+
+def reset_global_idx():
+    global global_idx
+    global_idx = 0
+    
+def get_global_idx():
+    global global_idx
+    return global_idx

@@ -6,6 +6,21 @@ from torch.autograd import Function
 from .lsq import *
 import warnings
 
+global_idx = 0
+
+def get_next_global_idx():
+    global global_idx
+    global_idx = global_idx + 1
+    return global_idx
+
+def reset_global_idx():
+    global global_idx
+    global_idx = 0
+    
+def get_global_idx():
+    global global_idx
+    return global_idx
+
 ## TOcheck
 class QuanLeakyRELU(nn.LeakyReLU):
 
@@ -529,6 +544,7 @@ class QuanConv(nn.Conv2d):
             self.bn_running_mean = torch.zeros(out_channels)
             self.bn_running_var = torch.ones(out_channels)
             self.momentum = 0.1
+        
 
     # @weak_script_method
     def forward(self, input, scale_x=None):
@@ -551,7 +567,7 @@ class QuanConv(nn.Conv2d):
             tmp = self.bn_weight / torch.sqrt(var_bn + 1e-5)
             w = tmp.view(tmp.size()[0], 1, 1, 1) * self.weight
             b = self.bias
-            if self.bias:
+            if self.bias != None:
                 b = tmp*(self.bias - mean_bn) + self.bn_bias
             else:
                 b = tmp*(0 - mean_bn) + self.bn_bias
@@ -570,10 +586,37 @@ class QuanConv(nn.Conv2d):
         else:
             bias_integer = None
 
+        # new to export onnx, part1
+        if get_global_idx() == 0:
+            np.save("npz_logging/input.npy",
+                (x/scale_x).detach().cpu().numpy()
+                )  
+        
         output2 = F.conv2d(x, weight_integer, bias_integer, self.stride, self.padding, self.dilation, self.groups) 
 
         if self.training and self.norm:
             output1 = output1 - output2.detach() + output2
+            
+        # new to export onnx, part2
+        if not self.training and get_global_idx() >= 0: #log npz:
+            idx = get_next_global_idx()
+            if bias_integer != None:
+                np.savez("npz_logging/" + str(idx) + "_conv",
+                         w=weight_integer.detach().cpu().numpy(),
+                         b=bias_integer.detach().cpu().numpy(), 
+                         input_scale=scale_x.detach().cpu().numpy(), 
+                         weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
+                         input=x.detach().cpu().numpy(), 
+                         output=output2.detach().cpu().numpy()
+                         )
+            else:
+                np.savez("npz_logging/" + str(idx) + "_conv",
+                         w=weight_integer.detach().cpu().numpy(), 
+                         input_scale=scale_x.detach().cpu().numpy(), 
+                         weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
+                         input=x.detach().cpu().numpy(), 
+                         output=output2.detach().cpu().numpy()
+                        )
             
         return output2
         
