@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from .utils import InitWeights_He, get_global_idx, get_next_global_idx
 import torch.nn.functional as F
-from quantizer.quant_lsq import QuanConv, QuanResize, QuanRELU
+from quantizer.quant_lsq import QuanConv, QuanResize, QuanRELU, QuanLeakyRELU
+from quantizer.act import build_act, Quanhswish
 from quantizer.lsq import LsqQuantizer4input
 import numpy as np
 
@@ -16,7 +17,7 @@ class conv(nn.Module):
         use_bias=False,
         dropout_rate=0,
         norm=True,
-        act_func="relu",
+        act_func="quanhswish",
     ):
         super(conv, self).__init__()
 
@@ -25,18 +26,19 @@ class conv(nn.Module):
         self.conv = QuanConv(in_channels=out_channels, out_channels=out_channels, 
                              kernel_size=kernel_size, padding=padding, bias=use_bias,
                              norm=True)
-        #self.act = QuanRELU()
+        self.act = build_act(act_func)
+        # self.act = QuanLeakyRELU(0.1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
         if self.dropout is not None:
             x = self.dropout(x)
-        #x = self.act(x)
+        x = self.act(x)
         
         x = self.conv(x)
         if self.dropout is not None:
             x = self.dropout(x)
-        #x = self.act(x)
+        x = self.act(x)
                 
         return x
 
@@ -57,10 +59,10 @@ class feature_fuse(nn.Module):
         x3 = self.conv33_di(x)
         
         xx = x1+x2+x3
-        if not self.training and get_global_idx() >= 0: #log npz:
-                idx = get_next_global_idx()
-                np.savez("npz_logging/" + str(idx) + "_add", input1=x1.detach().cpu().numpy(), input2=x2.detach().cpu().numpy(), 
-                         input3=x3.detach().cpu().numpy(), output=xx.detach().cpu().numpy())
+        # if not self.training and get_global_idx() >= 0: #log npz:
+        #         idx = get_next_global_idx()
+        #         np.savez("npz_logging/" + str(idx) + "_add", input1=x1.detach().cpu().numpy(), input2=x2.detach().cpu().numpy(), 
+        #                  input3=x3.detach().cpu().numpy(), output=xx.detach().cpu().numpy())
 
         return xx
 
@@ -79,19 +81,20 @@ class up(nn.Module):
                         all_positive=False,
                         per_channel=False
                     ) 
-        #self.act = QuanRELU()
+        self.act = build_act("quanhswish")
+        #self.act = QuanLeakyRELU(0.1)
 
     def forward(self, x):
         x = self.up(x)
-        #x = self.act(x)
+        x = self.act(x)
         x_r = self.resize(x, scale_factor=2, mode='nearest')
         
         #
         x_r, scale_r = self.quan_bf(x_r)
-        if not self.training and get_global_idx() >= 0: #log npz:
-            idx = get_next_global_idx()
-            np.savez("npz_logging/" + str(idx) + "_resize", input=x.detach().cpu().numpy(), 
-                     r_scale=scale_r.detach().cpu().numpy(), output= x_r.detach().cpu().numpy())
+        # if not self.training and get_global_idx() >= 0: #log npz:
+        #     idx = get_next_global_idx()
+        #     np.savez("npz_logging/" + str(idx) + "_resize", input=x.detach().cpu().numpy(), 
+        #              r_scale=scale_r.detach().cpu().numpy(), output= x_r.detach().cpu().numpy())
 
         return x_r
 
@@ -102,11 +105,12 @@ class down(nn.Module):
         # conv+bn
         self.down = QuanConv(in_c, out_c, kernel_size=2,
                              padding=0, stride=2, bias=False, norm=True)
-        #self.act = QuanRELU()
+        self.act = build_act("quanhswish")
+        #self.act = QuanLeakyRELU(0.1)
 
     def forward(self, x):
         x = self.down(x)
-        #x = self.act(x)
+        x = self.act(x)
         return x
 
 
@@ -228,29 +232,29 @@ class FR_UNet_Quan(nn.Module):
         concat_tensor_11 = torch.cat([x12, x_up22], dim=1)
         x13 = self.block13(concat_tensor_11)
         
-        if not self.training and get_global_idx() >= 0: #log npz:
-            idx = get_next_global_idx()
-            np.savez("npz_logging/" + str(idx)+ "block1_1" + "_concat", output=concat_tensor_1.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block2_1" + "_concat", output=concat_tensor_2.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block10" + "_concat", output=concat_tensor_3.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block20" + "_concat", output=concat_tensor_4.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block30" + "_concat", output=concat_tensor_5.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block11" + "_concat", output=concat_tensor_6.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block21" + "_concat", output=concat_tensor_7.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block31" + "_concat", output=concat_tensor_8.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block12" + "_concat", output=concat_tensor_9.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block22" + "_concat", output=concat_tensor_10.detach().cpu().numpy())
-            np.savez("npz_logging/" + str(idx)+ "block13" + "_concat", output=concat_tensor_11.detach().cpu().numpy())
+        # if not self.training and get_global_idx() >= 0: #log npz:
+        #     idx = get_next_global_idx()
+        #     np.savez("npz_logging/" + str(idx)+ "block1_1" + "_concat", output=concat_tensor_1.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block2_1" + "_concat", output=concat_tensor_2.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block10" + "_concat", output=concat_tensor_3.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block20" + "_concat", output=concat_tensor_4.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block30" + "_concat", output=concat_tensor_5.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block11" + "_concat", output=concat_tensor_6.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block21" + "_concat", output=concat_tensor_7.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block31" + "_concat", output=concat_tensor_8.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block12" + "_concat", output=concat_tensor_9.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block22" + "_concat", output=concat_tensor_10.detach().cpu().numpy())
+        #     np.savez("npz_logging/" + str(idx)+ "block13" + "_concat", output=concat_tensor_11.detach().cpu().numpy())
             
         
         if self.out_ave == True:
             tmp = self.final1(x1_1)+self.final2(x10)+self.final3(x11)+self.final4(x12)+self.final5(x13)
             output = tmp/5
             
-            if not self.training and get_global_idx() >= 0: #log npz:
-                idx = get_next_global_idx()
-                np.savez("npz_logging/" + str(idx) + "_add", out=tmp.detach().cpu().numpy())
-                np.savez("npz_logging/" + str(idx) + "_div", out=output.detach().cpu().numpy())
+            # if not self.training and get_global_idx() >= 0: #log npz:
+            #     idx = get_next_global_idx()
+            #     np.savez("npz_logging/" + str(idx) + "_add", out=tmp.detach().cpu().numpy())
+            #     np.savez("npz_logging/" + str(idx) + "_div", out=output.detach().cpu().numpy())
         else:
             output = self.final5(x13)
 

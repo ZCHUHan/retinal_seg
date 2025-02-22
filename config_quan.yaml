@@ -19,13 +19,13 @@ lr_scheduler:
   args:
     T_max: 40
 
-# epochs: 40
-epochs: 100
+epochs: 64
+# epochs: 100
 save_dir: saved/
-# val_per_epochs: 1
-# save_period: 1
-val_per_epochs: 5
-save_period: 5
+val_per_epochs: 4
+save_period: 4
+# val_per_epochs: 5
+# save_period: 5
 tensorboard: true
 threshold: 0.5
 threshold_low: 0.3

@@ -579,7 +579,7 @@ class QuanConv(nn.Conv2d):
         weight_integer = weight_integer.to(x.device)
         weight_scaling_factor = weight_scaling_factor.to(x.device)
         
-        if b is not None:
+        if b != None:
             b = b.to(x.device)
             bias_integer = SymmetricQuantFunction.apply(b, 16, scale_x * weight_scaling_factor.squeeze()) * scale_x * weight_scaling_factor.squeeze()
             bias_integer = bias_integer.to(x.device)
@@ -597,7 +597,7 @@ class QuanConv(nn.Conv2d):
         if self.training and self.norm:
             output1 = output1 - output2.detach() + output2
             
-        # new to export onnx, part2
+        #new to export onnx, part2
         if not self.training and get_global_idx() >= 0: #log npz:
             idx = get_next_global_idx()
             if bias_integer != None:
@@ -731,3 +731,85 @@ class SymmetricQuantFunction(Function):
             scale = scale.view(-1)
 
         return grad_output.clone() / scale, None, None, None
+
+
+class PActFn(Function):
+    @staticmethod
+    def forward(ctx, x, alpha, k): # k=8
+        # if alpha <= 0:
+        #     print ("org scale:", alpha, alpha.grad)
+        ctx.save_for_backward(x, alpha)
+        pow = torch.ceil(torch.log2(alpha**2)) 
+        clip_val = torch.pow(2, pow)
+    # y_1 = 0.5 * ( torch.abs(x).detach() - torch.abs(x - alpha).detach() + alpha.item() )
+        scale = (2**(k - 1)) / clip_val
+        y = torch.clamp(x + torch.sign(x) * 1e-6, min = -clip_val.item(), max = ((2**(k - 1) - 1) / scale).item())
+        y_q = torch.trunc(y * scale) / scale
+        return y_q
+
+    @staticmethod
+    def backward(ctx, dLdy_q):
+        # Backward function, I borrowed code from
+        # https://github.com/obilaniu/GradOverride/blob/master/functional.py
+        # We get dL / dy_q as a gradient
+        # print(current_thread())
+        x, alpha, = ctx.saved_tensors
+        # Weight gradient is only valid when [0, alpha]
+        # Actual gradient for alpha,
+        # By applying Chain Rule, we get dL / dy_q * dy_q / dy * dy / dalpha
+        # dL / dy_q = argument,  dy_q / dy * dy / dalpha = 0, 1 with x value range
+        dldy_sum = torch.sum(dLdy_q)
+        # if dldy_sum.item() != dldy_sum.item():
+        #     dLdy_q = torch.zeros(dLdy_q.shape).to(dLdy_q.device)
+        #     print ("PACT grad error 1", dLdy_q.shape)
+        #     print (dLdy_q)
+        #     print ("###############################################")
+        #     print (alpha)
+        #     print ("###############################################")
+        #     print (x)
+        #     exit()
+
+        pow = torch.ceil(torch.log2(alpha**2))
+        clip_val = torch.pow(2, pow)
+        lower_bound = x < -clip_val
+        upper_bound = x > clip_val
+        # x_range       = 1.0-lower_bound-upper_bound
+        x_range = ~(lower_bound |upper_bound)
+        grad_alpha = 2 * alpha * torch.sum(dLdy_q * (torch.ge(x, clip_val) | torch.le(x, -clip_val)).float()).view(-1)
+        # if grad_alpha.item() != grad_alpha.item():
+        #     print ("PACT grad error 2", x.shape)
+        #     print (alpha)
+        #     print ("###############################################")
+        #     print (x)
+        #     exit()
+        # x_range_sum = torch.sum(x_range.float())
+        # if x_range_sum.item() != x_range_sum.item():
+        #     print ("PACT grad error 3")
+        #     exit()
+
+        # if alpha - grad_alpha <= 0:
+        #     grad_alpha = torch.zeros(grad_alpha.shape).to(grad_alpha.device)
+        return dLdy_q * x_range.float(), grad_alpha, None
+
+class PACT(nn.Module):
+    def __init__(self, num_bits):
+        super(PACT, self).__init__()
+        self.num_bits = num_bits
+        self.clip_val = nn.Parameter(torch.Tensor([2]), requires_grad=True)
+
+    def forward(self, x):
+
+        # pow = torch.ceil(torch.log2(self.clip_val))
+        # self.clip_val[0] = torch.pow(2, pow)[0]
+        # x = F.relu(x)
+        # x = torch.where(x < self.clip_val, x, self.clip_val)
+        # x = torch.where(x < self.clip_val, x, self.clip_val)
+        # x = torch.where(x > -self.clip_val, x, -self.clip_val)
+        # n = float(2 ** (self.num_bits - 1)) / self.clip_val
+        # x_forward = torch.round(x * n) / n
+        # out = x_forward + x - x.detach()
+        out = PActFn.apply(x, self.clip_val, self.num_bits)
+        pow = torch.ceil(torch.log2(self.clip_val**2))
+        max_out = torch.pow(2, pow)[0]
+        scale_a = max_out / float((2**(self.num_bits - 1)))
+        return out, scale_a

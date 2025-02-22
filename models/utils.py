@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from inspect import signature
 from timm.models.layers import trunc_normal_
 from typing import Any, List, Optional, Tuple, Union, Dict, Callable
 
@@ -56,3 +57,11 @@ def reset_global_idx():
 def get_global_idx():
     global global_idx
     return global_idx
+
+def build_kwargs_from_config(config: Dict, target_func: Callable) -> Dict[str, Any]:
+    valid_keys = list(signature(target_func).parameters)
+    kwargs = {}
+    for key in config:
+        if key in valid_keys:
+            kwargs[key] = config[key]
+    return kwargs
