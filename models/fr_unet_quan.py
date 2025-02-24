@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .utils import InitWeights_He, get_global_idx, get_next_global_idx
 import torch.nn.functional as F
-from quantizer.quant_lsq import QuanConv, QuanResize, QuanRELU, QuanLeakyRELU
+from quantizer.quant_lsq import QuanConv, QuanResize, QuanRELU
 from quantizer.act import build_act, Quanhswish
 from quantizer.lsq import LsqQuantizer4input
 import numpy as np
@@ -27,7 +27,6 @@ class conv(nn.Module):
                              kernel_size=kernel_size, padding=padding, bias=use_bias,
                              norm=True)
         self.act = build_act(act_func)
-        # self.act = QuanLeakyRELU(0.1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
@@ -52,19 +51,36 @@ class feature_fuse(nn.Module):
             in_c, out_c, kernel_size=3, padding=1, bias=False, norm=True)
         self.conv33_di = QuanConv(
             in_c, out_c, kernel_size=3, padding=2, bias=False, dilation=2, norm=True)
+        
+        self.quan_out_1 = LsqQuantizer4input(
+                        nbit=8,
+                        all_positive=False,
+                        per_channel=False
+                    ) 
+        self.quan_out_2 = LsqQuantizer4input(
+                        nbit=8,
+                        all_positive=False,
+                        per_channel=False
+                    )
 
     def forward(self, x):
         x1 = self.conv11(x)
         x2 = self.conv33(x)
         x3 = self.conv33_di(x)
         
-        xx = x1+x2+x3
+        x_1, x_1_scale = self.quan_out_1(x1)
+        x_2, x_2_scale = self.quan_out_1(x2)
+        x_o, x_o_scale = self.quan_out_1(x_1 + x_2)
+        
+        x_3, x_3_scale = self.quan_out_2(x3)
+        x_o, x_o_2_scale = self.quan_out_1(x_o + x_3)
+        # xx = x1+x2+x3
         # if not self.training and get_global_idx() >= 0: #log npz:
         #         idx = get_next_global_idx()
         #         np.savez("npz_logging/" + str(idx) + "_add", input1=x1.detach().cpu().numpy(), input2=x2.detach().cpu().numpy(), 
         #                  input3=x3.detach().cpu().numpy(), output=xx.detach().cpu().numpy())
 
-        return xx
+        return x_o
 
 
 class up(nn.Module):
@@ -82,7 +98,6 @@ class up(nn.Module):
                         per_channel=False
                     ) 
         self.act = build_act("quanhswish")
-        #self.act = QuanLeakyRELU(0.1)
 
     def forward(self, x):
         x = self.up(x)
@@ -106,7 +121,6 @@ class down(nn.Module):
         self.down = QuanConv(in_c, out_c, kernel_size=2,
                              padding=0, stride=2, bias=False, norm=True)
         self.act = build_act("quanhswish")
-        #self.act = QuanLeakyRELU(0.1)
 
     def forward(self, x):
         x = self.down(x)
@@ -200,6 +214,24 @@ class FR_UNet_Quan(nn.Module):
             filters[0], num_classes, kernel_size=1, padding=0, bias=True)
         self.fuse = QuanConv(
             5, num_classes, kernel_size=1, padding=0, bias=True)
+        
+        # ? bit
+        if self.out_ave: 
+            self.quan_ = nn.ModuleDict({
+                name: LsqQuantizer4input(
+                    bit=8,
+                    per_channel=False,
+                    all_positive=False 
+                ) 
+                for name in ["final1", "final2", "final3", "final4", "final5"]
+            })
+        
+        self.quan_concat = LsqQuantizer4input(
+                        nbit=8,
+                        all_positive=False,
+                        per_channel=False
+                    ) 
+        
         self.apply(InitWeights_He)
 
     def forward(self, x):
@@ -207,30 +239,56 @@ class FR_UNet_Quan(nn.Module):
         x1_2, x_down1_2 = self.block1_2(x1_3)
         x2_2, x_up2_2, x_down2_2 = self.block2_2(x_down1_3)
         
-        concat_tensor_1 = torch.cat([x1_2, x_up2_2], dim=1)
-        x1_1, x_down1_1 = self.block1_1(concat_tensor_1)
-        concat_tensor_2 = torch.cat([x_down1_2, x2_2], dim=1)
-        x2_1, x_up2_1, x_down2_1 = self.block2_1(concat_tensor_2)
+        qx1_2, r1_2 = self.quan_concat(x1_2)
+        qx_up2_2, r_up2_2 = self.quan_concat(x_up2_2)
+        x1_1, x_down1_1 = self.block1_1(torch.cat([qx1_2, qx_up2_2], dim=1))
+        
+        qx_down1_2, rx_down1_2 = self.quan_concat(x_down1_2)
+        qx2_2, rx2_2 = self.quan_concat(x2_2)
+        x2_1, x_up2_1, x_down2_1 = self.block2_1(torch.cat([qx_down1_2, qx2_2], dim=1))
+        
         x3_1, x_up3_1, x_down3_1 = self.block3_1(x_down2_2)
-        concat_tensor_3 = torch.cat([x1_1, x_up2_1], dim=1)
-        x10, x_down10 = self.block10(concat_tensor_3)
-        concat_tensor_4 = torch.cat([x_down1_1, x2_1, x_up3_1], dim=1)
-        x20, x_up20, x_down20 = self.block20(concat_tensor_4)
-        concat_tensor_5 = torch.cat([x_down2_1, x3_1], dim=1)
-        x30, x_up30 = self.block30(concat_tensor_5)
+        
+        qx1_1, rx1_1 = self.quan_concat(x1_1)
+        qx_up2_1, rx_up2_1  = self.quan_concat(x_up2_1)
+        x10, x_down10 = self.block10(torch.cat([qx1_1, qx_up2_1], dim=1))
+        
+        qx_down1_1, rx_down1_1 = self.quan_concat(x_down1_1)
+        qx2_1, rx2_1 = self.quan_concat(x2_1)
+        qx_up3_1, rx_up3_1 = self.quan_concat(x_up3_1)
+        x20, x_up20, x_down20 = self.block20(torch.cat([qx_down1_1, qx2_1, qx_up3_1], dim=1))
+        
+        qx_down2_1, rx_down2_1 = self.quan_concat(x_down2_1)
+        qx3_1, rx3_1 = self.quan_concat(x3_1)
+        x30, x_up30 = self.block30(torch.cat([qx_down2_1, qx3_1], dim=1))
         _, x_up40 = self.block40(x_down3_1)
-        concat_tensor_6 = torch.cat([x10, x_up20], dim=1)
-        x11, x_down11 = self.block11(concat_tensor_6)
-        concat_tensor_7 = torch.cat([x_down10, x20, x_up30], dim=1)
-        x21, x_up21 = self.block21(concat_tensor_7)
-        concat_tensor_8 = torch.cat([x_down20, x30, x_up40], dim=1)
-        _, x_up31 = self.block31(concat_tensor_8)
-        concat_tensor_9 = torch.cat([x11, x_up21], dim=1)
-        x12 = self.block12(concat_tensor_9)
-        concat_tensor_10 = torch.cat([x_down11, x21, x_up31], dim=1)
-        _, x_up22 = self.block22(concat_tensor_10)
-        concat_tensor_11 = torch.cat([x12, x_up22], dim=1)
-        x13 = self.block13(concat_tensor_11)
+        
+        qx10, rx10 = self.quan_concat(x10)
+        qx_up20, rx_up20 = self.quan_concat(x_up20)
+        x11, x_down11 = self.block11(torch.cat([qx10, qx_up20], dim=1))
+        
+        qx_down10, rx_down10 = self.quan_concat(x_down10)
+        qx20, rx20 = self.quan_concat(x20)
+        qx_up30, rx_up30 = self.quan_concat(x_up30)
+        x21, x_up21 = self.block21(torch.cat([qx_down10, qx20, qx_up30], dim=1))
+        
+        qx_down20, rx_down20 = self.quan_concat(x_down20)
+        qx30, rx30 = self.quan_concat(x30)
+        qx_up40, rx_up40 = self.quan_concat(x_up40)
+        _, x_up31 = self.block31(torch.cat([qx_down20, qx30, qx_up40], dim=1))
+        
+        qx11, rx11 = self.quan_concat(x11)
+        qx_up21, rx_up21 = self.quan_concat(x_up21)
+        x12 = self.block12(torch.cat([qx11, qx_up21], dim=1))
+        
+        qx_down11, rx_down11 = self.quan_concat(x_down11)
+        qx21, rx21 = self.quan_concat(x21)
+        qx_up31, rx_up31 = self.quan_concat(x_up31)
+        _, x_up22 = self.block22(torch.cat([qx_down11, qx21, qx_up31], dim=1))
+        
+        qx12, rx12 = self.quan_concat(x12)
+        qx_up22, rx_up22 = self.quan_concat(x_up22)
+        x13 = self.block13(torch.cat([qx12, qx_up22], dim=1))
         
         # if not self.training and get_global_idx() >= 0: #log npz:
         #     idx = get_next_global_idx()
@@ -248,8 +306,20 @@ class FR_UNet_Quan(nn.Module):
             
         
         if self.out_ave == True:
-            tmp = self.final1(x1_1)+self.final2(x10)+self.final3(x11)+self.final4(x12)+self.final5(x13)
-            output = tmp/5
+            a, r_a = self.quan_["final1"](self.final1(x1_1))
+            b, r_b =self.quan_["final1"](self.final2(x10))
+            ab, r_ab = self.quan_["final2"](a+b)
+            
+            c, r_c = self.quan_["final2"](self.final3(x11))
+            abc, r_abc = self.quan_["final3"](ab+c)
+            
+            d, r_d = self.quan_["final3"](self.final4(x12))
+            abcd, r_abcd = self.quan_["final4"](abc+d)
+            
+            e, r_e = self.quan_["final4"](self.final5(x13))
+            output, r_out = self.quan_["final5"]((abcd+e)/5)
+            
+            # output = self.final1(x1_1)+self.final2(x10)+self.final3(x11)+self.final4(x12)+self.final5(x13)/5
             
             # if not self.training and get_global_idx() >= 0: #log npz:
             #     idx = get_next_global_idx()
@@ -257,5 +327,6 @@ class FR_UNet_Quan(nn.Module):
             #     np.savez("npz_logging/" + str(idx) + "_div", out=output.detach().cpu().numpy())
         else:
             output = self.final5(x13)
+            
 
         return output
