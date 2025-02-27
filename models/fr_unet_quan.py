@@ -95,6 +95,8 @@ class up(nn.Module):
         super(up, self).__init__()
         # conv+bn
         self.up = QuanConv(in_c, out_c, kernel_size=1,norm=True)
+        
+        # previous version
         #self.resize = QuanResize()
         self.resize = F.interpolate
         

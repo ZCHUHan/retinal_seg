@@ -35,7 +35,7 @@ python test.py -dp DATASET_PATH -wp pretrained_weights/DATASET_NAME
 ## Export
 
 ```
-python onnx_export.py --export_path outputs/onnx/frunet_fp.onnx
+python onnx_export.py --export_path outputs/onnx/frunet_fp_test_quan.onnx
 ```
 
 quan export
