@@ -1,14 +1,9 @@
 import numpy as np
-import random
-import json
-import os
 import matplotlib.pyplot as plt
+import argparse
+import json
 from scipy import special
-
-random.seed(42)
-np.random.seed(42)
-
-# Activation Functions
+import os
 ACT_FUNCS = {
     "swish": lambda x: x / (1.0 + np.exp(-x)),
     "sigmoid": lambda x: 1.0 / (1.0 + np.exp(-x)),
@@ -18,57 +13,97 @@ ACT_FUNCS = {
     "exp": lambda x: np.exp(x),
     "reci": lambda x: np.reciprocal(x),
     "sqrt_reci": lambda x: np.reciprocal(np.sqrt(x)),
-    "silu": lambda x: x / (1.0 + np.exp(-x))
+    "silu": lambda x: x / (1 + np.exp(-x)),
 }
 
-# Load JSON Data
-def load_json(filepath):
-    with open(filepath, 'r') as f:
-        data = json.load(f)
-    return data
+def parse_args():
+    parser = argparse.ArgumentParser(description="Plot an activation function")
+    parser.add_argument(
+        "--func", type=str, choices=ACT_FUNCS.keys(), required=False, 
+        help="Activation function to plot (e.g., 'swish', 'sigmoid', etc.)"
+    )
+    parser.add_argument(
+        "--xmin", type=float, default=-5.0, help="Minimum x value for plot"
+    )
+    parser.add_argument(
+        "--xmax", type=float, default=5.0, help="Maximum x value for plot"
+    )
+    parser.add_argument(
+        "--samples", type=int, default=1000, help="Number of samples for plotting"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, required=True, help="Directory to save the plot images"
+    )
+    parser.add_argument(
+        "--json_file", type=str, default=None, help="Path to the JSON file with parameterized functions"
+    )
+    return parser.parse_args()
 
-# Piecewise Linear Function based on JSON
-def piecewise_linear(x, breakpoints, slopes, intercepts):
-    for i in range(len(breakpoints) - 1):
-        if breakpoints[i] <= x < breakpoints[i + 1]:
-            return slopes[i] * x + intercepts[i]
-    return slopes[-1] * x + intercepts[-1]
+def load_json(json_file):
+    with open(json_file, "r") as f:
+        return json.load(f)
 
-# Plot Activation Functions vs Piecewise Linear Approximation
-def plot_activation_vs_pwl(json_data, act_func_name, output_dir):
-    x_values = np.linspace(-5, 5, 1000)
-    activation_func = ACT_FUNCS[act_func_name]
-    y_activation = activation_func(x_values)
+def plot_and_save_func(
+    original_func, pwl_func, xmin, xmax, samples, output_dir, filename, 
+    breakpoints=None, slopes=None, intercepts=None
+):
+    x = np.linspace(xmin, xmax, samples)
+    y_original = original_func(x)
+    y_fitted = pwl_func(x, xmin, xmax, breakpoints, slopes, intercepts) if breakpoints is not None else None
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    plt.figure(figsize=(6, 4))
+    plt.plot(x, y_original, label="Original Function", color="blue")
+    if y_fitted is not None:
+        plt.plot(x, y_fitted, label="PWL Function", linestyle="--", color="red")
+    plt.title(f"Activation Function: {filename}")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f"{output_dir}/{filename}.png")
+    plt.close()
 
-    # Plot for each set of parameters in the JSON file
-    for key, params in json_data[act_func_name].items():
-        breakpoints = params['breakpoints']
-        slopes = params['slopes']
-        intercepts = params['intercepts']
+def pwl_func(x, xmin, xmax, breakpoints, slopes, intercepts):
+    y = np.zeros_like(x)
+    breakpoints = np.insert(breakpoints, 0, xmin)
+    breakpoints = np.append(breakpoints, xmax)
 
-        y_pwl = [piecewise_linear(x, breakpoints, slopes, intercepts) for x in x_values]
+    for i in range(0, len(breakpoints)-1):
+        mask = (x >= breakpoints[i]) & (x < breakpoints[i+1])
+        y[mask] = slopes[i] * x[mask] + intercepts[i]
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(x_values, y_activation, label=f'{act_func_name} Activation Function', color='b')
-        plt.plot(x_values, y_pwl, label=f'PWL Approximation - Set {key}', color='r', linestyle='--')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.title(f'{act_func_name} vs PWL Approximation (Set {key})')
-        plt.legend()
-        plt.grid(True)
+    y[x == xmax] = slopes[-1] * x[x == xmax] + intercepts[-1]
+    return y
 
-        output_path = os.path.join(output_dir, f'{act_func_name}_pwl_set_{key}.png')
-        plt.savefig(output_path)
-        plt.close()
-        print(f'Plot saved: {output_path}')
+def plot_json_functions(json_data, xmin, xmax, samples, output_dir):
+    for func_name, params in json_data.items():
+        if func_name not in ACT_FUNCS:
+            print(f"Warning: No original function found for {func_name}. Skipping.")
+            continue
+
+        original_func = ACT_FUNCS[func_name]  
+
+        for key, func_params in params.items():
+            breakpoints = np.array(func_params["breakpoints"])
+            slopes = np.array(func_params["slopes"])
+            intercepts = np.array(func_params["intercepts"])
+
+            filename = f"{func_name}_{key}"
+            plot_and_save_func(
+                original_func, pwl_func, xmin, xmax, samples, output_dir, filename, 
+                breakpoints, slopes, intercepts
+            )
+
+def main():
+    args = parse_args()
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    if args.func:
+        func = ACT_FUNCS[args.func]
+        plot_and_save_func(func, lambda x, *_: None, args.xmin, args.xmax, args.samples, args.output_dir, args.func)
+    if args.json_file:
+        json_data = load_json(args.json_file)
+        plot_json_functions(json_data, args.xmin, args.xmax, args.samples, args.output_dir)
 
 if __name__ == "__main__":
-    # Load the JSON file
-    json_filepath = "./pretrained/silu_pwl_7.json"
-    json_data = load_json(json_filepath)
-
-    # Plot comparison for SiLU function
-    plot_activation_vs_pwl(json_data, "silu", output_dir="plots")
+    main()

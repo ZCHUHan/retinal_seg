@@ -31,7 +31,7 @@ def main():
     
     
     yaml = YAML(typ='safe', pure=True)
-    with open('config.yaml', 'r') as file:
+    with open('config_quan.yaml', 'r') as file:
         CFG = Bunch(yaml.load(file))
         
     model = get_instance(models, 'model', CFG)

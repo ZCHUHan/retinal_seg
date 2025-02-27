@@ -587,10 +587,10 @@ class QuanConv(nn.Conv2d):
             bias_integer = None
 
         # new to export onnx, part1
-        if get_global_idx() == 0:
-            np.save("npz_logging/input.npy",
-                (x/scale_x).detach().cpu().numpy()
-                )  
+        # if get_global_idx() == 0:
+        #     np.save("npz_logging/input.npy",
+        #         (x/scale_x).detach().cpu().numpy()
+        #         )  
         
         output2 = F.conv2d(x, weight_integer, bias_integer, self.stride, self.padding, self.dilation, self.groups) 
 
@@ -616,7 +616,7 @@ class QuanConv(nn.Conv2d):
                          weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
                          input=x.detach().cpu().numpy(), 
                          output=output2.detach().cpu().numpy()
-                        )
+                         )
             
         return output2
         

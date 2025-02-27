@@ -25,13 +25,20 @@ python train.py -dp DATASET_PATH
 Type this in terminal to run the test.py file
  
 ```
-python test.py -dp DATASET_PATH -wp WEIGHT_FILE_PATH
+python test.py -dp DATASET_PATH -wp WEIGHT_FILE_PATH (--sliding -ps 48 --stride 44)
 ```
 We have prepared the pre-trained models for both datasets in the folder 'pretrained_weights'. To replicate the results in the paper, directly run the following commands
 ```
 python test.py -dp DATASET_PATH -wp pretrained_weights/DATASET_NAME
 ```
 
+## Export
+
+```
+python onnx_export.py --export_path outputs/onnx/frunet_fp.onnx
+```
+
+quan export
 
  
 ## License

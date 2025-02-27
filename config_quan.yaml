@@ -1,7 +1,7 @@
 model:
   type: FR_UNet_Quan
   args:
-    {upsample: BiLinear}
+    {out_ave: True}
 
 loss:
   type: BCELoss
