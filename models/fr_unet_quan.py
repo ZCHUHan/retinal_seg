@@ -97,8 +97,8 @@ class up(nn.Module):
         self.up = QuanConv(in_c, out_c, kernel_size=1,norm=True)
         
         # previous version
-        #self.resize = QuanResize()
-        self.resize = F.interpolate
+        self.resize = QuanResize()
+        #self.resize = F.interpolate
         
         self.quan_res = LsqQuantizer4input(
                         nbit=8,
@@ -111,7 +111,7 @@ class up(nn.Module):
         x = self.up(x)
         x = self.act(x)
 
-        x_r, scale_r = self.quan_res(x)
+        #x_r, scale_r = self.quan_res(x)
         x_r = self.resize(x, scale_factor=2, mode='nearest')
         x_r, scale_r = self.quan_res(x_r)
         # if not self.training and get_global_idx() >= 0: #log npz:

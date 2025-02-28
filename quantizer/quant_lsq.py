@@ -597,26 +597,26 @@ class QuanConv(nn.Conv2d):
         if self.training and self.norm:
             output1 = output1 - output2.detach() + output2
             
-        #new to export onnx, part2
-        if not self.training and get_global_idx() >= 0: #log npz:
-            idx = get_next_global_idx()
-            if bias_integer != None:
-                np.savez("npz_logging/" + str(idx) + "_conv",
-                         w=weight_integer.detach().cpu().numpy(),
-                         b=bias_integer.detach().cpu().numpy(), 
-                         input_scale=scale_x.detach().cpu().numpy(), 
-                         weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
-                         input=x.detach().cpu().numpy(), 
-                         output=output2.detach().cpu().numpy()
-                         )
-            else:
-                np.savez("npz_logging/" + str(idx) + "_conv",
-                         w=weight_integer.detach().cpu().numpy(), 
-                         input_scale=scale_x.detach().cpu().numpy(), 
-                         weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
-                         input=x.detach().cpu().numpy(), 
-                         output=output2.detach().cpu().numpy()
-                         )
+        # #new to export onnx, part2
+        # if not self.training and get_global_idx() >= 0: #log npz:
+        #     idx = get_next_global_idx()
+        #     if bias_integer != None:
+        #         np.savez("npz_logging/" + str(idx) + "_conv",
+        #                  w=weight_integer.detach().cpu().numpy(),
+        #                  b=bias_integer.detach().cpu().numpy(), 
+        #                  input_scale=scale_x.detach().cpu().numpy(), 
+        #                  weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
+        #                  input=x.detach().cpu().numpy(), 
+        #                  output=output2.detach().cpu().numpy()
+        #                  )
+        #     else:
+        #         np.savez("npz_logging/" + str(idx) + "_conv",
+        #                  w=weight_integer.detach().cpu().numpy(), 
+        #                  input_scale=scale_x.detach().cpu().numpy(), 
+        #                  weight_scales=weight_scaling_factor.detach().cpu().numpy(), 
+        #                  input=x.detach().cpu().numpy(), 
+        #                  output=output2.detach().cpu().numpy()
+        #                  )
             
         return output2
         
