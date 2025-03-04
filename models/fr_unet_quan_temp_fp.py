@@ -21,7 +21,7 @@ class conv(nn.Module):
         self.dropout = nn.Dropout2d(dropout_rate, inplace=False) if dropout_rate > 0 else None
         # conv+bn
         
-        self.conv = nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=False)
+        self.conv = nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding=padding) #, bias=False
         self.act = nn.Hardswish()
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -42,11 +42,11 @@ class feature_fuse(nn.Module):
     def __init__(self, in_c, out_c):
         super(feature_fuse, self).__init__()
         self.conv11 = nn.Conv2d(
-            in_c, out_c, kernel_size=1, padding=0, bias=False)
+            in_c, out_c, kernel_size=1, padding=0) #, bias=False
         self.conv33 = nn.Conv2d(
-            in_c, out_c, kernel_size=3, padding=1, bias=False)
+            in_c, out_c, kernel_size=3, padding=1) #, bias=False
         self.conv33_di = nn.Conv2d(
-            in_c, out_c, kernel_size=3, padding=2, bias=False, dilation=2)
+            in_c, out_c, kernel_size=3, padding=2, dilation=2) #, bias=False
         
 
     def forward(self, x):
@@ -82,7 +82,7 @@ class down(nn.Module):
         super(down, self).__init__()
         # conv+bn
         self.down = nn.Conv2d(in_c, out_c, kernel_size=2,
-                      padding=0, stride=2, bias=False)
+                      padding=0, stride=2) #, bias=False
         self.act = nn.Hardswish()
 
     def forward(self, x):
