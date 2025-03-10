@@ -56,7 +56,7 @@ def main():
     # model.load_state_dict(new_state_dict, strict=False)
     
 
-    dummy_input = torch.rand(1, 1, 592, 592) #torch.rand((args.bs, 1, *resolution))
+    dummy_input = torch.rand(1, 1, 48, 48) #torch.rand((args.bs, 1, *resolution))
     export_onnx(model, args.export_path, dummy_input, simplify=True, opset=args.op_set)
 
 

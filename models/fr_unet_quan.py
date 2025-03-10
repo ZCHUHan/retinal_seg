@@ -344,23 +344,23 @@ class FR_UNet_Quan(nn.Module):
         x13 = self.block13(torch.cat([qx12, qx_up22], dim=1))    
         
         if self.out_ave == True:
-            a, r_a = self.quan_["final1_16bit"](self.final1(x1_1)) # 8, 16
-            b, r_b = self.quan_["final1_8bit"](self.final2(x10))
-            b, _ = self.quan_["final1_16bit"](b)
+            a, r_a = self.quan_["final1_16bit"](self.final1(qx1_1)) # 8, 16
+            b, r_b = self.quan_["final1_8bit"](self.final2(qx10))        
             
+            b, _ = self.quan_["final1_16bit"](b)
             ab, r_ab = self.quan_["final2_8bit"](a+b)    # 8, 16
             if not self.training and get_global_idx() >= 0: #log npz:
                 idx = get_next_global_idx()
                 np.savez("npz_logging/" + str(idx) + "_add", output_scale=r_ab.detach().cpu().numpy())
             
-            c, r_c = self.quan_["final2_16bit"](self.final3(x11))
+            c, r_c = self.quan_["final2_16bit"](self.final3(qx11))
             ab, _ = self.quan_["final2_16bit"](ab)
             abc, r_abc = self.quan_["final3_8bit"](ab+c) # 8, 16
             if not self.training and get_global_idx() >= 0: #log npz:
                 idx = get_next_global_idx()
                 np.savez("npz_logging/" + str(idx) + "_add", output_scale=r_abc.detach().cpu().numpy())   
             
-            d, r_d = self.quan_["final3_16bit"](self.final4(x12)) 
+            d, r_d = self.quan_["final3_16bit"](self.final4(qx12)) 
             abc, _ = self.quan_["final3_16bit"](abc)
             abcd, r_abcd = self.quan_["final4_8bit"](abc+d) # 8, 16
             if not self.training and get_global_idx() >= 0: #log npz:
