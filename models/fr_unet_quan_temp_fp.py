@@ -72,7 +72,7 @@ class up(nn.Module):
     def forward(self, x):
         x = self.up(x)
         x = self.act(x)
-        x_r = self.resize(x, scale_factor=2, mode='nearest')
+        x_r = self.resize(x, scale_factor=2, mode='bilinear')
         
         return x_r
 

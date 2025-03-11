@@ -118,7 +118,7 @@ class up(nn.Module):
         x = self.act(x)
 
         x_r, scale_r = self.quan_res(x)
-        x_r = self.resize(x, scale_factor=2, mode='nearest')
+        x_r = self.resize(x, scale_factor=2, mode='bilinear')
         x_r, scale_r = self.quan_res(x_r)
         
         if not self.training and get_global_idx() >= 0: #log npz:
