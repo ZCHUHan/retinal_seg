@@ -16,7 +16,7 @@ import ttach as tta
 
 
 class Trainer:
-    def __init__(self, model, CFG=None, loss=None, train_loader=None, val_loader=None, dataset_name=None):
+    def __init__(self, model, CFG=None, loss=None, train_loader=None, val_loader=None, dataset_name=None, resume=None):
         self.CFG = CFG
         if self.CFG.amp is True:
             self.scaler = torch.cuda.amp.GradScaler(enabled=True)
@@ -24,19 +24,44 @@ class Trainer:
         self.model = nn.DataParallel(model.cuda())
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.optimizer = get_instance(
-            torch.optim, "optimizer", CFG, self.model.parameters())
-        self.lr_scheduler = get_instance(
-            torch.optim.lr_scheduler, "lr_scheduler", CFG, self.optimizer)
+
         start_time = datetime.now().strftime('%y%m%d%H%M%S')
         self.checkpoint_dir = os.path.join(
             CFG.save_dir, self.CFG['model']['type']+'_'+CFG['model']['args']['upsample'], dataset_name, start_time)
         self.writer = tensorboard.SummaryWriter(self.checkpoint_dir)
         dir_exists(self.checkpoint_dir)
         cudnn.benchmark = True
-
+        
+        
+        # 初始化训练的起始 epoch
+        self.start_epoch = 1
+        
+        # 如果提供了 resume 参数，则从检查点恢复
+        if resume is not None and os.path.exists(resume):
+            checkpoint = torch.load(resume, map_location='cpu')  # 支持 CPU/GPU 兼容
+            
+            # 加载模型状态，忽略不匹配的参数
+            model_state_dict = checkpoint['state_dict']
+            current_state_dict = self.model.state_dict()
+            matched_state_dict = {k: v for k, v in model_state_dict.items() if k in current_state_dict}
+            current_state_dict.update(matched_state_dict)
+            self.model.load_state_dict(current_state_dict, strict=False)
+            
+            logger.info(f"Loaded {len(matched_state_dict)}/{len(model_state_dict)} parameters from checkpoint")
+            self.start_epoch = checkpoint['epoch'] + 1
+            
+            logger.info(f"Resuming training from checkpoint: {resume}, starting at epoch {self.start_epoch}")
+        else:
+            logger.info("Training from scratch")
+        
+        
+        self.optimizer = get_instance(
+            torch.optim, "optimizer", CFG, self.model.parameters())
+        self.lr_scheduler = get_instance(
+            torch.optim.lr_scheduler, "lr_scheduler", CFG, self.optimizer)
+        
     def train(self):
-        for epoch in range(1, self.CFG.epochs + 1):
+        for epoch in range(self.start_epoch, self.CFG.epochs + 1):
             self._train_epoch(epoch)
             if self.val_loader is not None and epoch % self.CFG.val_per_epochs == 0:
                 results = self._valid_epoch(epoch)

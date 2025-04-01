@@ -14,7 +14,7 @@ from bunch import Bunch
 
 
 
-def main(CFG, data_name, data_path, batch_size, with_val=False):
+def main(CFG, data_name, data_path, batch_size, with_val=False, resume=None):
     seed_torch()
     if with_val:
         train_dataset = vessel_dataset(data_path, mode="training", split=0.9)
@@ -40,7 +40,8 @@ def main(CFG, data_name, data_path, batch_size, with_val=False):
         CFG=CFG,
         train_loader=train_loader,
         val_loader=val_loader if with_val else None,
-        dataset_name=data_name
+        dataset_name=data_name,
+        resume=resume  # 
     )
 
     trainer.train()
@@ -52,13 +53,15 @@ if __name__ == '__main__':
                         help='the path of dataset')
     parser.add_argument('-dn', '--dataset_name', default="DRIVE", type=str,
                         help='the name of dataset')
-    parser.add_argument('-bs', '--batch_size', default=512,
+    parser.add_argument('-bs', '--batch_size', default=256,
                         help='batch_size for trianing and validation')
     parser.add_argument("--val", help="split training data for validation",
                         required=False, default=False, action="store_true")
+    parser.add_argument('--resume', type=str, default=None,
+                        help='path to checkpoint to resume training from (default: None)')
     args = parser.parse_args()
 
     yaml = YAML(typ='safe', pure=True)
     with open('config_quan.yaml', 'r') as file:
         CFG = Bunch(yaml.load(file))
-    main(CFG, args.dataset_name, args.dataset_path, args.batch_size, args.val)
+    main(CFG, args.dataset_name, args.dataset_path, args.batch_size, args.val, args.resume)

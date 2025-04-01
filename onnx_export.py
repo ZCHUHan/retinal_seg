@@ -18,7 +18,7 @@ from bunch import Bunch
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--export_path", type=str, default="outputs/onnx/frunet_fp.onnx")
+    parser.add_argument("--export_path", type=str, default="outputs/onnx/frunet_fp_newfinal_88p.onnx")
     parser.add_argument("--resolution", type=int, nargs="+", default=224)
     parser.add_argument("--op_set", type=int, default=16)
     parser.add_argument("--bs", type=int, default=1)
@@ -56,7 +56,7 @@ def main():
     # model.load_state_dict(new_state_dict, strict=False)
     
 
-    dummy_input = torch.rand(1, 1, 48, 48) #torch.rand((args.bs, 1, *resolution))
+    dummy_input = torch.rand(1, 1, 64, 64) #torch.rand((args.bs, 1, *resolution))
     export_onnx(model, args.export_path, dummy_input, simplify=True, opset=args.op_set)
 
 

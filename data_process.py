@@ -186,6 +186,8 @@ def normalization(imgs_list):
     mean = torch.mean(imgs)
     std = torch.std(imgs)
     normal_list = []
+    with open('normalization_log.txt', 'a') as f:
+        f.write(f"==================== mean: {mean} std: {std}\n")
     for i in imgs_list:
         n = Normalize([mean], [std])(i)
         n = (n - torch.min(n)) / (torch.max(n) - torch.min(n))
